@@ -1,0 +1,9 @@
+.env
+.Rhistory
+.RData
+.Rproj.user/
+data/raw/
+data/processed/
+*.zip
+*.pdf
+.DS_Store
