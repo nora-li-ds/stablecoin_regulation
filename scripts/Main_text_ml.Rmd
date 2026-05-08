@@ -103,7 +103,7 @@ print(table(data$weak_label))
 
 ```{r}
 # Use a stratified 80/20 split so each weak label appears in both sets.
-set.seed(0057)
+set.seed(5757) # For reproducibility
 
 
 data <- data |>
@@ -540,6 +540,7 @@ conf_df <- conf_df |>
 conf_plot <- ggplot(conf_df, aes(x = Predicted, y = Actual, fill = Freq)) +
   geom_tile() +
   geom_text(aes(label = Freq), size = 3.2) +
+  scale_y_discrete(limits = rev(label_order)) +
   labs(
     title = "SVM confusion matrix",
     x = "Predicted label",
