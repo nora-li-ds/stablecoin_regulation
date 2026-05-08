@@ -1,2 +1,2 @@
 "model","accuracy","macro_f1","vocabulary_size","train_rows","test_rows"
-"linear_svm_tfidf",0.585858585858586,0.578288131336912,500,389,99
+"linear_svm_tfidf",0.555555555555556,0.516898656898657,500,389,99
