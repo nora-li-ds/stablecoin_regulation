@@ -75,7 +75,7 @@ The weak stress-narrative labels are:
 
 ## Repository Contents
 
-```text
+
 scripts/
   Data collection, processing, text mining, and machine learning scripts / notebooks
 
@@ -87,6 +87,17 @@ outputs/tables/
 
 Raw and processed data are not uploaded to this public repository. They are retained locally for reproducibility and assessment submission.
 
+## Reproducibility
+
+The data collection process is documented in the project scripts:
+
+- `scripts/data.R/` contains the Guardian API collection workflow.
+- `scripts/data_E.R/` contains the Ethereum Research JSON/API collection workflow.
+- `scripts/Main_text_ml.Rmd` contains the text processing, weak labelling, TF-IDF, bigram analysis, and machine learning workflow.
+
+For the assessment submission, the compressed code-and-data file includes both the raw and processed datasets used in the analysis. This means the full workflow is reproducible from data collection to filtering, labelling, text mining, model training, and evaluation.
+
+Raw and processed datasets are not uploaded to this public GitHub repository, but they are included in the submitted assessment archive.
 
 ## Project Note
 
