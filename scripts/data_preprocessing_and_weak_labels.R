@@ -1,8 +1,12 @@
 library(dplyr)
 library(stringr)
 
+# 1. Load processed datasets
+
 guardian <- read.csv("data/processed/guardian_filtered.csv")
 eth <- read.csv("data/processed/ethresearch_filtered.csv")
+
+# 2. Convert both datasets into a common text format
 
 guardian_text <- guardian |>
   transmute(
@@ -38,16 +42,7 @@ write.csv(
 cat("Combined rows:", nrow(combined), "\n")
 print(table(combined$source))
 
-
-## This script combines the processed Guardian and EthResearch datasets into a single dataset for analysis. It also performs some basic text cleaning and filtering to ensure the data is suitable for further processing.
-
-#weak lables for training data:
-
-library(dplyr)
-library(stringr)
-
-combined <- read.csv("data/processed/combined_text_data.csv")
-
+# 3. Create weak stress-narrative labels
 label_text <- function(text) {
   text <- tolower(text)
   
