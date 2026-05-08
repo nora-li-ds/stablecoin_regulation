@@ -1,3 +1,28 @@
+# SECU0057 Data Science Project
+# Candidate Number: RWFP0
+#
+# File name:
+# data_preprocessing_and_weak_labels.R
+#
+# File purpose:
+# This script combines the processed Guardian and Ethereum Research datasets
+# into one text dataset. It also creates weak rule-based stress narrative labels
+# for later text mining and machine learning.
+#
+# Input:
+# - data/processed/guardian_filtered.csv
+# - data/processed/ethresearch_filtered.csv
+#
+# Output:
+# - data/processed/combined_text_data.csv
+# - data/processed/combined_labeled.csv
+
+# Notes:
+# - The weak labels are not manually checked ground truth.
+# - They are transparent rule-based labels for exploratory text mining and ML.
+# - All file paths are relative to the project root folder.
+
+
 library(dplyr)
 library(stringr)
 
@@ -24,6 +49,11 @@ eth_text <- eth |>
     text = paste(title, text_plain, sep = " ")
   )
 
+# Combine and clean the text data
+# str_squish() removes extra spaces.
+# text_lower is created for keyword matching.
+# Very short or missing texts are removed.
+
 combined <- bind_rows(guardian_text, eth_text) |>
   mutate(
     text = str_squish(text),
@@ -43,6 +73,19 @@ cat("Combined rows:", nrow(combined), "\n")
 print(table(combined$source))
 
 # 3. Create weak stress-narrative labels
+# This function assigns one weak label to each text using keyword dictionaries.
+# The labels are:
+# - fraud_security
+# - regulatory_stress
+# - market_panic
+# - technical_friction
+# - neutral_other
+#
+# The priority order is:
+# fraud_security > regulatory_stress > market_panic > technical_friction > neutral_other
+#
+# This means if a text contains both fraud and regulation words,
+# it will be labelled as fraud_security.
 label_text <- function(text) {
   text <- tolower(text)
   
@@ -91,6 +134,8 @@ write.csv(
   fileEncoding = "UTF-8"
 )
 
+#Print summary checks
+# These checks help confirm that the script ran correctly.
 cat("Label counts:\n")
 print(table(combined_labeled$weak_label))
 

@@ -1,60 +1,31 @@
-# Stablecoin Regulation Project: Text Analysis and Machine Learning
+# SECU0057 Data Science Project: Text Mining and Machine Learning
 
-This R Markdown notebook reproduces the text mining and machine learning part of the SECU0057 project.
+**Candidate Number:** RWFP0
 
-It starts from the processed labelled dataset:
+This R Markdown notebook reproduces the text mining and machine learning part of the project.
 
-```text
-data/processed/combined_labeled.csv
-```
+**Input**
 
-This file is created by:
+- `data/processed/combined_labeled.csv`
 
-```text
-scripts/data_preprocessing_and_weak_labels.R
-```
+**Output**
 
-The notebook then:
+- `outputs/tables/svm_confusion_matrix.csv`
+- `outputs/tables/svm_metrics.csv`
+- `outputs/tables/top_tfidf_terms_by_label.csv`
+- `outputs/tables/top_bigram_tfidf_terms_by_label.csv`
+- `outputs/figures/*.png`
 
-1. loads and checks the labelled dataset;
-2. performs basic text cleaning;
-3. creates an 80/20 stratified train/test split;
-4. builds TF-IDF text features;
-5. trains a linear SVM classifier;
-6. evaluates the model using accuracy, macro-F1, and a confusion matrix;
-7. saves result tables;
-8. generates figures used in the report and appendix.
+**Notes**
 
-# How to run this notebook
-
-Before running this notebook, make sure the following files and folders exist:
-
-```text
-data/processed/combined_labeled.csv
-outputs/
-outputs/tables/
-outputs/figures/
-```
-
-If the `outputs/` folders do not exist, this notebook will create them automatically.
-
-Run the chunks from top to bottom. The notebook uses relative file paths, so it should be run from the project root folder:
-
-```text
-stablecoin_regulation/
-```
-
-The main outputs are saved to:
-
-```text
-outputs/tables/
-outputs/figures/
-```
+- A fixed random seed is used for reproducibility.
+- The vocabulary is built only from training data to avoid data leakage.
+- All paths are relative to the project root folder.
 
 # 1. Load packages
 
 ```{r}
-# !!Install packages only if they are missing!!!
+# !!Install packages only if they are missing
 # install.packages(c("dplyr", "stringr", "tidytext", "ggplot2", "tidyr", "e1071"), repos = "https://cloud.r-project.org")
 
 library(dplyr)
@@ -156,11 +127,15 @@ cat("Vocabulary size:", length(vocab), "\n")
 ```
 
 # 6. Create TF-IDF matrices
+# This function creates a TF-IDF matrix using the fixed training vocabulary.
+# It adds missing vocabulary columns so train and test matrices have the same columns.
+# This avoids the "test data does not match model" error.
 
 ```{r}
 # It adds missing vocabulary columns so train and test matrices match.
 make_tfidf_matrix <- function(input_data, vocab_terms) {
-  
+
+
   token_data <- input_data |>
     select(doc_id, text) |>
     unnest_tokens(word, text) |>
@@ -600,26 +575,10 @@ ggsave(
 
 # 15. Text length distribution by source
 ```{r}
-text_length_plot <- data |>
-  ggplot(aes(x = source, y = nchar(text), fill = source)) +
-  geom_boxplot(show.legend = FALSE) +
-  labs(
-    title = "Text length distribution by source",
-    x = "Source",
-    y = "Number of characters"
-  ) +
-  theme_minimal()
+# This section checks whether Guardian and Ethereum Research texts
+# have different text lengths. This supports the limitation that
+# the two sources are different types of text.
 
-text_length_plot
-
-ggsave(
-  "outputs/figures/text_length_distribution_by_source.png",
-  text_length_plot,
-  width = 6,
-  height = 4
-)
-
-#results save
 text_length_summary <- data |>
   mutate(text_length = nchar(text)) |>
   group_by(source) |>
@@ -639,5 +598,26 @@ write.csv(
   "outputs/tables/text_length_summary_by_source.csv",
   row.names = FALSE
 )
-# The end of the notebook. All outputs are saved in the outputs/ folder.
+
+text_length_plot <- data |>
+  mutate(text_length = nchar(text)) |>
+  ggplot(aes(x = source, y = text_length, fill = source)) +
+  geom_boxplot(show.legend = FALSE) +
+  labs(
+    title = "Text length distribution by source",
+    x = "Source",
+    y = "Number of characters"
+  ) +
+  theme_minimal()
+
+text_length_plot
+
+ggsave(
+  "outputs/figures/text_length_distribution_by_source.png",
+  text_length_plot,
+  width = 6,
+  height = 4
+)
+
 ```
+# The end of the notebook. All outputs are saved in the outputs folder.

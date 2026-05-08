@@ -1,7 +1,27 @@
+# SECU0057 Data Science Project
+# Candidate Number: RWFP0
+#
+# File purpose:
+# This script collects crypto-related articles from The Guardian Open Platform API.
+# It searches for stablecoin, crypto regulation, crypto fraud, crypto money laundering,
+# and related terms.
+#
+# Input:
+# - Guardian Open Platform API
+# - Search query terms defined in this script
+#
+# Output:
+# - Raw Guardian article data saved in data/raw/
+# - Filtered Guardian data saved in data/processed/
+#
+# Notes:
+# - The API collection follows the Guardian Open Platform access method.
+# - Broad search results are later filtered for crypto/security relevance.
+
 #install all the required packages if not already installed
 #install.packages(c("httr", "jsonlite", "dotenv", "dplyr"), repos = "https://cloud.r-project.org")library(httr)
 # !! Important:
-# Do not put API keys directly in this script. I put mine in a .env file that is not shared on GitHub.
+# NO KEY HERE: I put mine in a .env file that is not shared on GitHub.
 # Store GUARDIAN_API_KEY in .env.
 
 library(httr)

@@ -1,3 +1,22 @@
+# SECU0057 Data Science Project
+# Candidate Number: RWFP0
+#
+# File purpose:
+# This script collects crypto-native technical discussion from Ethereum Research.
+# It uses public Discourse JSON endpoints to collect topics and posts related to
+# stablecoins, gas fees, fee markets, EIP-1559, congestion, MEV, USDC, USDT, and depeg.
+#
+# Input:
+# - Ethereum Research public JSON endpoints
+# - Search query terms defined in this script
+#
+# Output:
+# - Raw Ethereum Research topic/post data saved in data/raw/
+# - Filtered Ethereum Research data saved in data/processed/
+#
+# Notes:
+# - This script does not bypass access controls.
+# - The collected data are used only at aggregate text level.
 library(httr)
 library(jsonlite)
 library(dplyr)
