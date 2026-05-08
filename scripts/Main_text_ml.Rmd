@@ -1,0 +1,399 @@
+# Stablecoin Regulation Project: Text Analysis and Machine Learning
+
+```{r}
+#install.packages(c("tidytext", "tidymodels", "stopwords", "textrecipes"), repos = "https://cloud.r-project.org")
+install.packages("recipes", repos = "https://cloud.r-project.org")
+install.packages("lava")
+```
+
+
+# Load packages
+```{r}
+library(caret)
+library(e1071)
+library(dplyr)
+library(stringr)
+library(tidytext)
+library(ggplot2)
+#library(recipes)
+#library(caret)
+```
+
+# Load labelled data
+
+```{r}
+data <- read.csv("data/processed/combined_labeled.csv")
+
+cat("Rows:", nrow(data), "\n")
+
+cat("Source distribution:\n")
+print(table(data$source))
+
+cat("Weak label distribution:\n")
+print(table(data$weak_label))
+```
+
+# Basic cleaning
+
+```{r}
+data <- data |>
+  filter(!is.na(text), !is.na(weak_label)) |>
+  mutate(
+    doc_id = row_number(),
+    weak_label = as.factor(weak_label),
+    text = str_squish(text),
+    text_lower = tolower(text)
+  )
+
+cat("Rows after cleaning:", nrow(data), "\n")
+print(table(data$weak_label))
+```
+
+# train/test split
+```{r}
+set.seed(123)
+
+data <- data |>
+  mutate(row_id = row_number())
+
+train_ids <- data |>
+  group_by(weak_label) |>
+  sample_frac(0.8) |>
+  pull(row_id)
+
+train_data <- data |> filter(row_id %in% train_ids)
+test_data <- data |> filter(!row_id %in% train_ids)
+
+cat("Train label distribution:\n")
+print(table(train_data$weak_label))
+
+cat("Test label distribution:\n")
+print(table(test_data$weak_label))
+```
+
+# create TF-IDF vocabulary
+```{r}
+
+tokens_train <- train_data |>
+  select(doc_id, text) |>
+  unnest_tokens(word, text) |>
+  filter(
+    str_detect(word, "^[a-z]+$"),
+    nchar(word) > 2
+  ) |>
+  anti_join(stop_words, by = "word")
+
+tfidf_train <- tokens_train |>
+  count(doc_id, word, sort = FALSE) |>
+  bind_tf_idf(word, doc_id, n)
+
+top_terms <- tfidf_train |>
+  group_by(word) |>
+  summarise(total_tfidf = sum(tf_idf), .groups = "drop") |>
+  arrange(desc(total_tfidf)) |>
+  slice_head(n = 500)
+
+vocab <- top_terms$word
+
+cat("Vocabulary size:", length(vocab), "\n")
+
+# create TF-IDF matrices
+make_tfidf_matrix <- function(input_data, vocab_terms) {
+  
+  token_data <- input_data |>
+    select(doc_id, text) |>
+    unnest_tokens(word, text) |>
+    filter(
+      str_detect(word, "^[a-z]+$"),
+      nchar(word) > 2,
+      word %in% vocab_terms
+    ) |>
+    anti_join(stop_words, by = "word")
+  
+  tfidf_data <- token_data |>
+    count(doc_id, word, sort = FALSE) |>
+    bind_tf_idf(word, doc_id, n)
+  
+  wide_data <- tfidf_data |>
+    select(doc_id, word, tf_idf) |>
+    pivot_wider(
+      names_from = word,
+      values_from = tf_idf,
+      values_fill = 0
+    )
+  
+  output <- input_data |>
+    select(doc_id, weak_label) |>
+    left_join(wide_data, by = "doc_id")
+  
+  output[is.na(output)] <- 0
+  
+  # Add missing vocabulary columns
+  missing_terms <- setdiff(vocab_terms, names(output))
+  
+  for (term in missing_terms) {
+    output[[term]] <- 0
+  }
+  
+  # Force same column order every time
+  output <- output |>
+    select(doc_id, weak_label, all_of(vocab_terms))
+  
+  return(output)
+}
+
+train_matrix <- make_tfidf_matrix(train_data, vocab)
+test_matrix <- make_tfidf_matrix(test_data, vocab)
+
+x_train <- train_matrix |> select(-doc_id, -weak_label)
+y_train <- train_matrix$weak_label
+
+x_test <- test_matrix |> select(-doc_id, -weak_label)
+y_test <- test_matrix$weak_label
+
+cat("Training matrix dimensions:\n")
+print(dim(x_train))
+
+cat("Testing matrix dimensions:\n")
+print(dim(x_test))
+
+```
+
+# Train SVM model, evaluate model and macro-F1
+```{r}
+svm_model <- svm(
+  x = x_train,
+  y = y_train,
+  kernel = "linear"
+)
+
+pred <- predict(svm_model, x_test)
+
+conf_mat <- table(
+  Predicted = pred,
+  Actual = y_test
+)
+
+print(conf_mat)
+
+accuracy <- sum(diag(conf_mat)) / sum(conf_mat)
+cat("Accuracy:", accuracy, "\n")
+
+calculate_f1 <- function(conf_mat) {
+  classes <- colnames(conf_mat)
+  f1_scores <- c()
+  
+  for (class in classes) {
+    tp <- conf_mat[class, class]
+    fp <- sum(conf_mat[class, ]) - tp
+    fn <- sum(conf_mat[, class]) - tp
+    
+    precision <- ifelse((tp + fp) == 0, 0, tp / (tp + fp))
+    recall <- ifelse((tp + fn) == 0, 0, tp / (tp + fn))
+    
+    f1 <- ifelse(
+      (precision + recall) == 0,
+      0,
+      2 * precision * recall / (precision + recall)
+    )
+    
+    f1_scores <- c(f1_scores, f1)
+  }
+  
+  return(mean(f1_scores))
+}
+
+macro_f1 <- calculate_f1(conf_mat)
+cat("Macro-F1:", macro_f1, "\n")
+
+```
+
+# save the results
+```{r}
+
+dir.create("outputs", showWarnings = FALSE)
+dir.create("outputs/tables", showWarnings = FALSE)
+
+conf_df <- as.data.frame(conf_mat)
+
+write.csv(
+  conf_df,
+  "outputs/tables/svm_confusion_matrix.csv",
+  row.names = FALSE
+)
+
+metrics_df <- data.frame(
+  model = "linear_svm_tfidf",
+  accuracy = accuracy,
+  macro_f1 = macro_f1,
+  vocabulary_size = length(vocab),
+  train_rows = nrow(train_data),
+  test_rows = nrow(test_data)
+)
+
+write.csv(
+  metrics_df,
+  "outputs/tables/svm_metrics.csv",
+  row.names = FALSE
+)
+
+print(metrics_df)
+
+label_prop_plot <- data |>
+  count(source, weak_label) |>
+  group_by(source) |>
+  mutate(prop = n / sum(n)) |>
+  ggplot(aes(x = weak_label, y = prop, fill = source)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Proportion of weak stress-narrative labels by source",
+    x = "Weak label",
+    y = "Proportion within source"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+
+label_prop_plot
+
+ggsave(
+  "outputs/figures/weak_label_distribution_proportion.png",
+  label_prop_plot,
+  width = 8,
+  height = 5
+)
+
+```
+# something more : Top TF-IDF terms by stress narrative
+```{r}
+custom_stopwords <- c(
+  "trump", "farage", "president", "minister", "ministers",
+  "liberal", "nsw", "police",
+  "fei", "fhe", "rai", "solo", "pid",
+  "gemini", "metacoin", "ghostpool",
+  "slice", "heap", "ssusd",
+  "preconfer", "preconf", "preconfirmations", "preconfers",
+  "claimable", "forkable", "rebased",
+  "stamina"
+)
+label_tokens <- data |>
+  select(doc_id, weak_label, text) |>
+  unnest_tokens(word, text) |>
+  filter(
+    str_detect(word, "^[a-z]+$"),
+    nchar(word) > 2,
+    !word %in% custom_stopwords
+  ) |>
+  anti_join(stop_words, by = "word")
+
+label_tfidf <- label_tokens |>
+  count(weak_label, word, sort = FALSE) |>
+  bind_tf_idf(word, weak_label, n)
+
+top_label_terms <- label_tfidf |>
+  group_by(weak_label) |>
+  arrange(desc(tf_idf)) |>
+  slice_head(n = 10) |>
+  ungroup()
+
+print(top_label_terms)
+write.csv(
+  top_label_terms,
+  "outputs/tables/top_tfidf_terms_by_label.csv",
+  row.names = FALSE
+)
+top_terms_plot <- top_label_terms |>
+  mutate(word = reorder_within(word, tf_idf, weak_label)) |>
+  ggplot(aes(x = word, y = tf_idf, fill = weak_label)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ weak_label, scales = "free") +
+  coord_flip() +
+  scale_x_reordered() +
+  labs(
+    title = "Top TF-IDF terms by weak stress-narrative label",
+    x = "Term",
+    y = "TF-IDF"
+  ) +
+  theme_minimal()
+
+top_terms_plot
+
+ggsave(
+  "outputs/figures/top_tfidf_terms_by_label.png",
+  top_terms_plot,
+  width = 10,
+  height = 7
+)
+```
+
+## BIGRAM ANALYSIS
+
+```{r}
+custom_stopwords <- c(
+  "trump", "farage", "president", "minister", "ministers",
+  "liberal", "nsw", "fei", "fhe", "rai", "solo", "pid",
+  "gemini", "metacoin", "ghostpool",
+  "slice", "heap", "ssusd",
+  "preconfer", "preconf", "preconfirmation",
+  "preconfirmations", "preconfers",
+  "claimable", "forkable", "rebased",
+  "stamina", "justindrake", "laplace", "gamma", "asic",
+  "skde", "msgs", "pubkeys"
+)
+
+bigram_tokens <- data |>
+  select(doc_id, weak_label, text) |>
+  unnest_tokens(bigram, text, token = "ngrams", n = 2) |>
+  tidyr::separate(bigram, into = c("word1", "word2"), sep = " ") |>
+  filter(
+    !word1 %in% stop_words$word,
+    !word2 %in% stop_words$word,
+    !word1 %in% custom_stopwords,
+    !word2 %in% custom_stopwords,
+    str_detect(word1, "^[a-z]+$"),
+    str_detect(word2, "^[a-z]+$"),
+    nchar(word1) > 2,
+    nchar(word2) > 2
+  ) |>
+  unite(bigram, word1, word2, sep = " ")
+
+bigram_tfidf <- bigram_tokens |>
+  count(weak_label, bigram, sort = FALSE) |>
+  bind_tf_idf(bigram, weak_label, n)
+
+top_bigram_terms <- bigram_tfidf |>
+  group_by(weak_label) |>
+  arrange(desc(tf_idf)) |>
+  slice_head(n = 8) |>
+  ungroup()
+
+print(top_bigram_terms)
+
+write.csv(
+  top_bigram_terms,
+  "outputs/tables/top_bigram_tfidf_terms_by_label.csv",
+  row.names = FALSE
+)
+
+bigram_plot <- top_bigram_terms |>
+  mutate(bigram = reorder_within(bigram, tf_idf, weak_label)) |>
+  ggplot(aes(x = bigram, y = tf_idf, fill = weak_label)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ weak_label, scales = "free") +
+  coord_flip() +
+  scale_x_reordered() +
+  labs(
+    title = "Top bigram TF-IDF terms by weak stress-narrative label",
+    x = "Bigram",
+    y = "TF-IDF"
+  ) +
+  theme_minimal()
+
+bigram_plot
+
+ggsave(
+  "outputs/figures/top_bigram_tfidf_terms_by_label.png",
+  bigram_plot,
+  width = 10,
+  height = 7
+)
+```
